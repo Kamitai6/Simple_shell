@@ -29,8 +29,6 @@ int parsecmd(char *argv[][ARGVSIZE], char **filename, int *length, char *buf, ch
 	int redirect = 0;
 	int pipeline = 0;
 
-	*filename = "";
-	*length = 0;
 	s = buf;
 
 	while (s < ebuf) {
@@ -68,15 +66,28 @@ int parsecmd(char *argv[][ARGVSIZE], char **filename, int *length, char *buf, ch
 void runcmd(char *buf)
 {
 	char *argv[ARGVSIZE][ARGVSIZE];
-	char* filename;
+	char* filename = "";
 	int length = 0;
 	int fd = 0, pp[2];
+	int i = 0;
 
 	memset(argv, 0, sizeof(argv));
 	if (parsecmd(argv, &filename, &length, buf, &buf[strlen(buf)]) > 0)
 	{
-		if (length > 0) {
-			for (int i = 0; i < length; ++i) {
+		loop:
+			if (length == i) {
+				//printf("final\n");
+				if (strcmp(filename, "") != 0) {
+					fd = open(filename, O_CREAT | O_WRONLY, 0666);
+					if (fd == -1) perror("open");
+					close(1);
+					dup(fd);
+					close(fd);
+				}
+				if (execvp(argv[length][0], argv[length]) < 0)
+					perror("execvp");
+			}
+			else {
 				if (pipe(pp) < 0) {
 					perror("pipe");
 					exit(-1);
@@ -87,14 +98,8 @@ void runcmd(char *buf)
 					close(pp[1]);
 					dup(pp[0]);
 					close(pp[0]);
-					if (strcmp(filename, "") != 0) {
-						fd = open(filename, O_CREAT | O_WRONLY, 0666);
-						close(1);
-						dup(fd);
-						close(fd);
-					}
-					if (execvp(argv[i+1][0], argv[i+1]) < 0)
-						perror("execvp");
+					i++;
+					goto loop;
 				}
 				else {
 					//printf("parent\n");
@@ -106,18 +111,6 @@ void runcmd(char *buf)
 						perror("execvp");
 				}
 			}
-		}
-		else {
-			if (strcmp(filename, "") != 0) {
-				fd = open(filename, O_CREAT | O_WRONLY, 0666);
-				if (fd == -1) perror("open");
-				close(1);
-				dup(fd);
-				close(fd);
-			}
-			if (execvp(argv[0][0], argv[0]) < 0)
-				perror("execvp");
-		}
 	}
 	exit(-1);
 }
